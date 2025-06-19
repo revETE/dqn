@@ -1,0 +1,7 @@
+h5py
+librosa
+hydra-core
+transformers
+editdistance
+pytorch-lightning>=1.5.8
+sentencepiece
