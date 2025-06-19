@@ -1,7 +1,2 @@
-h5py
-librosa
-hydra-core
-transformers
-editdistance
-pytorch-lightning>=1.5.8
-sentencepiece
+dacite >= 1.9.2
+PyYAML >= 6.0.2

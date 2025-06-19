@@ -8,8 +8,8 @@ setup(
     package_dir={"dqn": "dqn"},
     entry_points={
         "console_scripts": [
-            "dqn-train = dqn.cli:train",
-            "dqn-evaluate = dqn.cli:eval",
+            "dqn-train = dqn.cli:train_cli",
+            "dqn-evaluate = dqn.cli:eval_cli",
         ]
     },
 )
