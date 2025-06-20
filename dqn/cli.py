@@ -71,6 +71,7 @@ def train_cli():
         print("Interrupted")
     finally:
         state.checkpoint_save(cfg, q_network, optimizer, rb, force=True)
+        state.close()
 
 
 def eval_cli():

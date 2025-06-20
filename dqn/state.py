@@ -39,6 +39,10 @@ class State:
         # Create TB Summary writer
         self.writer = SummaryWriter(f"{cfg.tensorboard_path}/{cfg.run_name()}")
 
+    def close(self):
+        self.pbar.close()
+        self.writer.close()
+
     def update(self, rewards: np.ndarray, terminated: np.ndarray) -> None:
         self.timestep += 1
         self.total_length += 1
