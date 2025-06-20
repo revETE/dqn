@@ -18,18 +18,44 @@ class ReplayBuffer:
         n_samples, n_frames, d_rows, d_cols = observations.shape
 
         if self._write_position + n_samples >= self._capacity:
+            head = self._capacity - self._write_position
+            tail = n_samples - head
+
+            rb_ix_from = self._write_position
+            rb_ix_till = self._write_position + head
+
+            ob_ix_from = 0
+            ob_ix_till = head
+
+            # Assign
+            self.action[rb_ix_from:rb_ix_till] = actions[ob_ix_from:ob_ix_till]
+            self.reward[rb_ix_from:rb_ix_till] = rewards[ob_ix_from:ob_ix_till]
+            self.terminated[rb_ix_from:rb_ix_till] = terminated[ob_ix_from:ob_ix_till]
+            self.observation[rb_ix_from:rb_ix_till] = observations[ob_ix_from:ob_ix_till]
+            self.observation_next[rb_ix_from:rb_ix_till] = observations_next[ob_ix_from:ob_ix_till]
+
             self._write_position = 0
             self._overwrite = True
 
-        ix_from = self._write_position
-        ix_till = self._write_position + n_samples
+            rb_ix_from = self._write_position
+            rb_ix_till = self._write_position + tail
+
+            ob_ix_from = head
+            ob_ix_till = n_samples
+
+        else:
+            rb_ix_from = self._write_position
+            rb_ix_till = self._write_position + n_samples
+
+            ob_ix_from = 0
+            ob_ix_till = n_samples
 
         # Assign
-        self.action[ix_from:ix_till] = actions
-        self.reward[ix_from:ix_till] = rewards
-        self.terminated[ix_from:ix_till] = terminated
-        self.observation[ix_from:ix_till] = observations
-        self.observation_next[ix_from:ix_till] = observations_next
+        self.action[rb_ix_from:rb_ix_till] = actions[ob_ix_from:ob_ix_till]
+        self.reward[rb_ix_from:rb_ix_till] = rewards[ob_ix_from:ob_ix_till]
+        self.terminated[rb_ix_from:rb_ix_till] = terminated[ob_ix_from:ob_ix_till]
+        self.observation[rb_ix_from:rb_ix_till] = observations[ob_ix_from:ob_ix_till]
+        self.observation_next[rb_ix_from:rb_ix_till] = observations_next[ob_ix_from:ob_ix_till]
 
         self._write_position += n_samples
 
