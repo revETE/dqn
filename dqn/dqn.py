@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*
 import random
+import imageio
 import numpy as np
 
 import torch
@@ -10,6 +11,7 @@ from tqdm import tqdm
 # Local
 from .model import QNetwork
 from .state import State
+from .video import make_image
 from .config import Config
 from .buffer import ReplayBuffer
 
@@ -77,7 +79,7 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         train_observations = torch.Tensor(train_observations).to(cfg.device)
 
         # Forward pass
-        q_values = q_network(train_observations)
+        q_values = q_network(train_observations)  # shape=(n_samples, n_actions)
 
         # Calculate mse loss
         y = q_values.gather(1, train_actions.view(cfg.replay_buffer_sampling, 1))
@@ -110,6 +112,12 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
 
 
 def eval(envs, cfg: Config, state: State, q_network: QNetwork):
+    # Video recording
+    size = int(np.ceil(np.sqrt(cfg.n_envs)).item())
+    output_path = f"{cfg.checkpoint_path}/{cfg.ckp_name()}.mp4"
+    writer = imageio.get_writer(output_path, format="FFMPEG", mode="I", fps=60)
+
+    # Metrics
     total_length = np.zeros((cfg.n_envs,))
     total_reward = np.zeros((cfg.n_envs,))
     total_games = np.zeros((cfg.n_envs,))
@@ -124,6 +132,9 @@ def eval(envs, cfg: Config, state: State, q_network: QNetwork):
             x = torch.Tensor(observations).to(cfg.device)
             q_values = q_network(x)  # shape=(n_envs, n_actions)
             actions = torch.argmax(q_values, dim=1).cpu().numpy()  # shape=(n_envs,)
+
+        # Video recording
+        writer.append_data(make_image(observations, size, size))
 
         # Perform action and receive observation and reward
         (
@@ -143,7 +154,7 @@ def eval(envs, cfg: Config, state: State, q_network: QNetwork):
             for length in total_length[terminated]:
                 lengths_list.append(length)
 
-            # Update EMA
+            # Update reward
             for reward in total_reward[terminated]:
                 rewards_list.append(reward)
 
@@ -161,6 +172,7 @@ def eval(envs, cfg: Config, state: State, q_network: QNetwork):
 
         pbar.set_description(f"step={timestep} " + stats + f"games={total_games.sum():.0f}")
 
+    writer.close()
     state.report_eval(
         np.mean(lengths_list),
         np.mean(rewards_list),
