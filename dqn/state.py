@@ -34,7 +34,7 @@ class State:
         self.cfg = cfg
 
         # Create tqdm progress bar
-        self.pbar = tqdm(total=cfg.n_timesteps)
+        self.pbar = tqdm(total=cfg.n_timesteps, smoothing=0.95)
 
         # Create TB Summary writer
         self.writer = SummaryWriter(f"{cfg.tensorboard_path}/{cfg.run_name()}")
@@ -169,3 +169,6 @@ class State:
         self.ema_alpha = npzfile["ema_alpha"]
         self.timestep = npzfile["timestep"]
         self.epoch = npzfile["epoch"]
+
+        # Update pbar with initial progress
+        self.pbar.update(self.timestep)

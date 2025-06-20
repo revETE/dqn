@@ -17,6 +17,12 @@ from .buffer import ReplayBuffer
 
 
 def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_network, optimizer):
+    # Video recording
+    if cfg.record_train_video:
+        size = int(np.ceil(np.sqrt(cfg.n_envs)).item())
+        output_path = f"{cfg.checkpoint_path}/{cfg.ckp_name()}_train.mp4"
+        writer = imageio.get_writer(output_path, format="FFMPEG", mode="I", fps=60)
+
     # Create Traget Network and load weights from Q-Network
     target_network = QNetwork(envs.single_action_space.n).to(cfg.device)
     target_network.load_state_dict(q_network.state_dict())
@@ -38,10 +44,29 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         )
 
     observations, info = envs.reset()
-    for timestep in range(state.timestep, cfg.n_timesteps + 1):
+    for i, ts in enumerate(range(state.timestep, cfg.n_timesteps + 1)):
+        if i > 0:
+            # Async API: Receive observation and reward
+            (
+                observations_next,  # shape=(n_envs, n_frames, d_rows, d_cols)
+                rewards,  # shape=(n_envs,)
+                terminated,  # shape=(n_envs,)
+                _,
+                info,
+            ) = envs.recv()
+            state.update(rewards, terminated)  # Update metrics and state
+
+            # Store observations in replay buffer
+            rb.add(observations, observations_next, actions, rewards, terminated)
+            observations = observations_next
+
+        # Video recording
+        if cfg.record_train_video:
+            writer.append_data(make_image(observations, size, size))
+
         # Epsilon greedy policy with linear schedule
         slope = (cfg.exploration_end - cfg.exploration_begin) / cfg.exploration_timesteps
-        epsilon = np.maximum(slope * timestep + cfg.exploration_begin, cfg.exploration_end)
+        epsilon = np.maximum(slope * ts + cfg.exploration_begin, cfg.exploration_end)
 
         if random.random() < epsilon:
             actions = envs.action_space.sample()  # shape=(n_envs,)
@@ -51,19 +76,12 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
                 q_values = q_network(x)  # shape=(n_envs, n_actions)
                 actions = torch.argmax(q_values, dim=1).cpu().numpy()  # shape=(n_envs,)
 
-        # Perform action and receive observation and reward
-        (
-            observations_next,  # shape=(n_envs, n_frames, d_rows, d_cols)
-            rewards,  # shape=(n_envs,)
-            terminated,  # shape=(n_envs,)
-            _,
-            info,
-        ) = envs.step(actions)
-        state.update(rewards, terminated)  # Update metrics and state
+        # Async API: Perform action
+        envs.send(actions)
 
-        # Store observations in replay buffer
-        rb.add(observations, observations_next, actions, rewards, terminated)
-        observations = observations_next
+        # Wait for buffer
+        if ts < cfg.replay_buffer_sampling:
+            continue
 
         # Sample minibatch from replay buffer
         (
@@ -106,7 +124,7 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         scheduler.step()
 
         # Update target network
-        if timestep % cfg.target_update_frequency == 0:
+        if ts % cfg.target_update_frequency == 0:
             state.next_epoch()  # Update metrics and state
 
             for target_params, q_params in zip(target_network.parameters(), q_network.parameters()):
@@ -115,11 +133,16 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         #
         # Model and Replay Buffer checkpoint
         #
-        if timestep % cfg.checkpoint_frequency == 0:
+        if ts % cfg.checkpoint_frequency == 0:
             state.checkpoint_save(cfg, q_network, optimizer, rb)
 
+            if cfg.record_train_video:
+                writer.close()
+                output_path = f"{cfg.checkpoint_path}/{cfg.ckp_name()}_train.mp4"
+                writer = imageio.get_writer(output_path, format="FFMPEG", mode="I", fps=60)
+
         # Pause training and evaluate
-        if timestep % cfg.evaluate_model_frequency == 0:
+        if ts % cfg.evaluate_model_frequency == 0:
             eval(eval_envs, cfg, state, q_network)
             q_network.train()
 
@@ -133,14 +156,15 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
 
 def eval(envs, cfg: Config, state: State, q_network: QNetwork):
     # Video recording
-    size = int(np.ceil(np.sqrt(cfg.n_envs)).item())
-    output_path = f"{cfg.checkpoint_path}/{cfg.ckp_name()}.mp4"
-    writer = imageio.get_writer(output_path, format="FFMPEG", mode="I", fps=60)
+    if cfg.record_eval_video:
+        size = int(np.ceil(np.sqrt(cfg.n_envs)).item())
+        output_path = f"{cfg.checkpoint_path}/{cfg.ckp_name()}_eval.mp4"
+        writer = imageio.get_writer(output_path, format="FFMPEG", mode="I", fps=60)
 
     # Metrics
-    total_length = np.zeros((cfg.n_envs,))
-    total_reward = np.zeros((cfg.n_envs,))
-    total_games = np.zeros((cfg.n_envs,))
+    total_length = np.zeros((envs.num_envs,))
+    total_reward = np.zeros((envs.num_envs,))
+    total_games = np.zeros((envs.num_envs,))
 
     rewards_list = []
     lengths_list = []
@@ -154,7 +178,8 @@ def eval(envs, cfg: Config, state: State, q_network: QNetwork):
             actions = torch.argmax(q_values, dim=1).cpu().numpy()  # shape=(n_envs,)
 
         # Video recording
-        writer.append_data(make_image(observations, size, size))
+        if cfg.record_eval_video:
+            writer.append_data(make_image(observations, size, size))
 
         # Perform action and receive observation and reward
         (
@@ -192,7 +217,6 @@ def eval(envs, cfg: Config, state: State, q_network: QNetwork):
 
         pbar.set_description(f"step={timestep} " + stats + f"games={total_games.sum():.0f}")
 
-    writer.close()
     state.report_eval(
         np.mean(lengths_list),
         np.mean(rewards_list),
@@ -200,3 +224,6 @@ def eval(envs, cfg: Config, state: State, q_network: QNetwork):
         np.std(rewards_list),
         total_games.sum(),
     )
+
+    if cfg.record_eval_video:
+        writer.close()

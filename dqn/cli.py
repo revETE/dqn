@@ -7,6 +7,7 @@ import torch
 import ale_py
 import gymnasium as gym
 
+from ale_py.vector_env import AtariVectorEnv
 
 # Local
 from .dqn import train
@@ -14,7 +15,6 @@ from .state import State
 from .config import Config
 from .model import QNetwork
 from .buffer import ReplayBuffer
-from .environment import wrap_env
 
 
 def train_cli():
@@ -28,33 +28,9 @@ def train_cli():
         config_dict = yaml.safe_load(fd)
         cfg = dacite.from_dict(data_class=Config, data=dict(config_dict))
 
-    envs = gym.vector.SyncVectorEnv(
-        [
-            lambda: wrap_env(
-                gym.make(
-                    cfg.env_id,
-                    render_mode="rgb_array",
-                    obs_type="grayscale",
-                    frameskip=3,
-                )
-            )
-            for _ in range(cfg.n_envs)  # Create environments
-        ]
-    )
-
-    eval_envs = gym.vector.SyncVectorEnv(
-        [
-            lambda: wrap_env(
-                gym.make(
-                    cfg.env_id,
-                    render_mode="rgb_array",
-                    obs_type="grayscale",
-                    frameskip=3,
-                )
-            )
-            for _ in range(cfg.n_envs)  # Create environments
-        ]
-    )
+    # Create a vector environment
+    envs = AtariVectorEnv(game=cfg.env_id, num_envs=cfg.n_envs, thread_affinity_offset=1)
+    eval_envs = AtariVectorEnv(game=cfg.env_id, num_envs=1)
 
     state = State(cfg)
     rb = ReplayBuffer(cfg.replay_buffer_capacity)

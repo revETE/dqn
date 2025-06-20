@@ -11,8 +11,8 @@ class ReplayBuffer:
         self.action = np.ndarray((self._capacity,), dtype=np.uint8)
         self.reward = np.ndarray((self._capacity,), dtype=np.float32)
         self.terminated = np.ndarray((self._capacity,), dtype=np.uint8)
-        self.observation = np.ndarray((self._capacity, 4, 75, 55), dtype=np.uint8)
-        self.observation_next = np.ndarray((self._capacity, 4, 75, 55), dtype=np.uint8)
+        self.observation = np.ndarray((self._capacity, 4, 84, 84), dtype=np.uint8)
+        self.observation_next = np.ndarray((self._capacity, 4, 84, 84), dtype=np.uint8)
 
     def add(self, observations, observations_next, actions, rewards, terminated):
         n_samples, n_frames, d_rows, d_cols = observations.shape

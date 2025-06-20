@@ -52,6 +52,9 @@ class Config:
 
     tensorboard_path: str = "run/tb"  # Tensorboard runs storage path
 
+    record_train_video: bool = False
+    record_eval_video: bool = True
+
     def run_name(self) -> str:
         if not hasattr(self, "_run_name"):
             self._run_name = f"{self.env_id.replace('/', '-')}__{self.exp_name}__{int(time.time())}"
