@@ -29,14 +29,28 @@ def train_cli():
 
     envs = gym.vector.SyncVectorEnv(
         [
-            lambda: wrap_env(gym.make(cfg.env_id, render_mode="rgb_array"))
+            lambda: wrap_env(
+                gym.make(
+                    cfg.env_id,
+                    render_mode="rgb_array",
+                    obs_type="grayscale",
+                    frameskip=3,
+                )
+            )
             for _ in range(cfg.n_envs)  # Create environments
         ]
     )
 
     eval_envs = gym.vector.SyncVectorEnv(
         [
-            lambda: wrap_env(gym.make(cfg.env_id, render_mode="rgb_array"))
+            lambda: wrap_env(
+                gym.make(
+                    cfg.env_id,
+                    render_mode="rgb_array",
+                    obs_type="grayscale",
+                    frameskip=3,
+                )
+            )
             for _ in range(cfg.n_envs)  # Create environments
         ]
     )

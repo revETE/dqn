@@ -20,12 +20,12 @@ from .model import QNetwork
 
 @dataclass
 class Config:
-    device: str = "cuda"
+    device: str = "cpu"
 
-    env_id: str = "ALE/SpaceInvaders-v5"
+    env_id: str = "SpaceInvaders-v4"
     exp_name: str = "default"
 
-    n_envs: int = 32
+    n_envs: int = 25
     n_timesteps: int = 350_000  # Number of training timesteps
     n_eval_timesteps: int = 1_000  # Number of evaluation timesteps
 

@@ -16,7 +16,7 @@ class QNetwork(nn.Module):
             nn.Conv2d(64, 64, 3, stride=1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(1024, 512),
+            nn.Linear(960, 512),
             nn.ReLU(),
             nn.Linear(512, d_action_space),
         )
