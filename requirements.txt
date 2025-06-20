@@ -1,2 +1,11 @@
+# Atari environments
+ale-py >= 0.11.0
+gymnasium >= 1.1.1
+
+# CLI tools
 dacite >= 1.9.2
 PyYAML >= 6.0.2
+
+# Video recordings
+imageio >= 2.37.0
+imageio-ffmpeg >= 0.6.0
