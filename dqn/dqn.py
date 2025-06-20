@@ -16,12 +16,26 @@ from .config import Config
 from .buffer import ReplayBuffer
 
 
-def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_network: QNetwork):
+def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_network, optimizer):
     # Create Traget Network and load weights from Q-Network
     target_network = QNetwork(envs.single_action_space.n).to(cfg.device)
     target_network.load_state_dict(q_network.state_dict())
 
-    optimizer = torch.optim.AdamW(q_network.parameters(), lr=cfg.optimizer_lr)
+    if state.timestep > 1:
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=cfg.optimizer_lr,
+            div_factor=2,
+            last_epoch=state.timestep,
+            total_steps=cfg.n_timesteps,
+        )
+    else:
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=cfg.optimizer_lr,
+            div_factor=2,
+            total_steps=cfg.n_timesteps,
+        )
 
     observations, info = envs.reset()
     for timestep in range(state.timestep, cfg.n_timesteps + 1):
@@ -89,6 +103,7 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
         # Update target network
         if timestep % cfg.target_update_frequency == 0:
@@ -101,14 +116,19 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         # Model and Replay Buffer checkpoint
         #
         if timestep % cfg.checkpoint_frequency == 0:
-            state.checkpoint_save(cfg, q_network, rb)
+            state.checkpoint_save(cfg, q_network, optimizer, rb)
 
         # Pause training and evaluate
         if timestep % cfg.evaluate_model_frequency == 0:
             eval(eval_envs, cfg, state, q_network)
             q_network.train()
 
-        state.report(rb, epsilon, loss.cpu().detach().numpy().item())
+        state.report(
+            rb,
+            epsilon,
+            loss.cpu().detach().numpy().item(),
+            optimizer.param_groups[0]["lr"],
+        )
 
 
 def eval(envs, cfg: Config, state: State, q_network: QNetwork):

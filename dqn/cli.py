@@ -3,6 +3,7 @@ import yaml
 import dacite
 import argparse
 
+import torch
 import ale_py
 import gymnasium as gym
 
@@ -58,17 +59,18 @@ def train_cli():
     state = State(cfg)
     rb = ReplayBuffer(cfg.replay_buffer_capacity)
     q_network = QNetwork(envs.single_action_space.n).to(cfg.device)
+    optimizer = torch.optim.AdamW(q_network.parameters(), lr=cfg.optimizer_lr)
 
     # Load checkpoint if any
-    state.checkpoint_load(cfg, q_network, rb)
+    state.checkpoint_load(cfg, q_network, optimizer, rb)
 
     # Hard training ))
     try:
-        train(envs, eval_envs, cfg, state, rb, q_network)
+        train(envs, eval_envs, cfg, state, rb, q_network, optimizer)
     except KeyboardInterrupt:
         print("Interrupted")
     finally:
-        state.checkpoint_save(cfg, q_network, rb, force=True)
+        state.checkpoint_save(cfg, q_network, optimizer, rb, force=True)
 
 
 def eval_cli():

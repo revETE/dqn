@@ -64,17 +64,18 @@ class State:
     def next_epoch(self):
         self.epoch += 1
 
-    def report(self, rb: ReplayBuffer, epsilon: float, loss: float):
-        self._report_tb(self.writer, self.timestep, epsilon, loss)
+    def report(self, rb: ReplayBuffer, epsilon: float, loss: float, lr: float):
+        self._report_tb(self.writer, self.timestep, epsilon, loss, lr)
         self._report_pbar(self.pbar, self.timestep, epsilon, loss, rb)
 
-    def _report_tb(self, writer, timestep: int, epsilon: float, loss: float):
+    def _report_tb(self, writer, timestep: int, epsilon: float, loss: float, lr: float):
         if timestep % 10 == 0:
-            writer.add_scalar("episode/length_ema", self.length_ema, timestep)
-            writer.add_scalar("episode/reward_ema", self.reward_ema, timestep)
-            writer.add_scalar("episode/epsilon", epsilon, timestep)
-            writer.add_scalar("games/loss", loss, timestep)
-            writer.add_scalar("games/total", self.total_games.sum(), timestep)
+            writer.add_scalar("train/length_ema", self.length_ema, timestep)
+            writer.add_scalar("train/reward_ema", self.reward_ema, timestep)
+            writer.add_scalar("train/epsilon", epsilon, timestep)
+            writer.add_scalar("train/lr", lr, timestep)
+            writer.add_scalar("train/loss", loss, timestep)
+            writer.add_scalar("train/games", self.total_games.sum(), timestep)
 
     def _report_pbar(self, pbar, timestep: int, epsilon: float, loss: float, rb: ReplayBuffer):
         pbar.set_description(
@@ -85,17 +86,23 @@ class State:
         )
 
     def report_eval(self, length_avg, reward_avg, length_std, reward_std, total):
-        self.writer.add_scalar("episode/eval_length_avg", length_avg, self.timestep)
-        self.writer.add_scalar("episode/eval_reward_avg", reward_avg, self.timestep)
-        self.writer.add_scalar("episode/eval_length_std", length_std, self.timestep)
-        self.writer.add_scalar("episode/eval_reward_std", reward_std, self.timestep)
-        self.writer.add_scalar("games/eval_total", total, self.timestep)
+        self.writer.add_scalar("eval/length_avg", length_avg, self.timestep)
+        self.writer.add_scalar("eval/reward_avg", reward_avg, self.timestep)
+        self.writer.add_scalar("eval/length_std", length_std, self.timestep)
+        self.writer.add_scalar("eval/reward_std", reward_std, self.timestep)
+        self.writer.add_scalar("eval/games", total, self.timestep)
 
-    def checkpoint_save(self, cfg: Config, q_network: QNetwork, rb: ReplayBuffer, force=False):
+    def checkpoint_save(self, cfg: Config, q_network, optimizer, rb: ReplayBuffer, force=False):
         # Model checkpoint (storing every snapshot)
         model_current = f"{cfg.checkpoint_path}/{cfg.ckp_name()}__{cfg.checkpoint_model_name}.pth"
         model_latest = f"{cfg.checkpoint_path}/latest__{cfg.checkpoint_model_name}.pth"
-        torch.save(q_network.state_dict(), model_current)
+        torch.save(
+            {
+                "q_network_state_dict": q_network.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+            },
+            model_current,
+        )
         os.symlink(os.path.abspath(model_current), f"{cfg.checkpoint_path}/tmp.link")
         os.rename(f"{cfg.checkpoint_path}/tmp.link", model_latest)
 
@@ -114,13 +121,15 @@ class State:
             os.symlink(os.path.abspath(rb_current), f"{cfg.checkpoint_path}/tmp.link")
             os.rename(f"{cfg.checkpoint_path}/tmp.link", rb_latest)
 
-    def checkpoint_load(self, cfg: Config, q_network: QNetwork, rb: ReplayBuffer) -> None:
+    def checkpoint_load(self, cfg: Config, q_network: QNetwork, optimizer, rb: ReplayBuffer):
         model_latest = f"{cfg.checkpoint_path}/latest__{cfg.checkpoint_model_name}.pth"
         state_latest = f"{cfg.checkpoint_path}/latest__{cfg.checkpoint_state_name}.npz"
         buffer_latest = f"{cfg.checkpoint_path}/latest__{cfg.checkpoint_buffer_name}.npz"
 
         if os.path.exists(model_latest):
-            q_network.load_state_dict(torch.load(model_latest, weights_only=True))
+            checkpoint = torch.load(model_latest, weights_only=True)
+            q_network.load_state_dict(checkpoint["q_network_state_dict"])
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             print(f"Model checkpoint loaded from {model_latest}")
 
         if os.path.exists(state_latest):
