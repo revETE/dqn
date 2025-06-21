@@ -2,12 +2,6 @@
 ale-py >= 0.11.0
 gymnasium >= 1.1.1
 
-# DL
-torch >= 2.7.0
-torchaudio >= 2.7.0
-torchvision >= 0.22.0
-tensorboard >= 2.19.0
-
 # CLI tools
 tqdm >= 4.67.1
 dacite >= 1.9.2
