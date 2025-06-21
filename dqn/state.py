@@ -3,7 +3,7 @@ import os
 import torch
 import numpy as np
 
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 # Local
@@ -13,28 +13,24 @@ from .buffer import ReplayBuffer
 
 
 class State:
-    total_length: np.ndarray
-    total_reward = np.ndarray
-    total_games = np.ndarray
-
-    reward_ema: float = 0.0
-    length_ema: float = 0.0
-    ema_alpha: float = 0.05
-
-    timestep: int = 1
-    epoch: int = 0
-
     def __init__(self, cfg: Config, *args, **kwargs) -> None:
+        self._timestep = 1
+        self._epoch = 0
+
         super().__init__(*args, **kwargs)
         self.total_length = np.zeros((cfg.n_envs,))
         self.total_reward = np.zeros((cfg.n_envs,))
         self.total_games = np.zeros((cfg.n_envs,))
 
+        self.reward_ema = 0.0
+        self.length_ema = 0.0
+        self.ema_alpha = 0.05
+
         # Store config
         self.cfg = cfg
 
         # Create tqdm progress bar
-        self.pbar = tqdm(total=cfg.n_timesteps, smoothing=0.95)
+        self.pbar = tqdm(total=cfg.n_timesteps)
 
         # Create TB Summary writer
         self.writer = SummaryWriter(f"{cfg.tensorboard_path}/{cfg.run_name()}")
@@ -43,8 +39,22 @@ class State:
         self.pbar.close()
         self.writer.close()
 
+    @property
+    def epoch(self):
+        return self._epoch
+
+    def next_epoch(self):
+        self._epoch += 1
+
+    @property
+    def timestep(self):
+        return self._timestep + 0  # Return copy, not reference
+
+    def next_timestep(self):
+        self._timestep += 1
+
     def update(self, rewards: np.ndarray, terminated: np.ndarray) -> None:
-        self.timestep += 1
+        self.next_timestep()
         self.total_length += 1
         self.total_reward += rewards
 
@@ -65,12 +75,9 @@ class State:
             self.total_reward[terminated] = 0  # Reset rewards
             self.total_games[terminated] += 1  # Update number of played games
 
-    def next_epoch(self):
-        self.epoch += 1
-
     def report(self, rb: ReplayBuffer, epsilon: float, loss: float, lr: float):
         self._report_tb(self.writer, self.timestep, epsilon, loss, lr)
-        self._report_pbar(self.pbar, self.timestep, epsilon, loss, rb)
+        self._report_pbar(self.pbar, self.timestep, epsilon, loss, rb, lr)
 
     def _report_tb(self, writer, timestep: int, epsilon: float, loss: float, lr: float):
         if timestep % 10 == 0:
@@ -81,12 +88,12 @@ class State:
             writer.add_scalar("train/loss", loss, timestep)
             writer.add_scalar("train/games", self.total_games.sum(), timestep)
 
-    def _report_pbar(self, pbar, timestep: int, epsilon: float, loss: float, rb: ReplayBuffer):
+    def _report_pbar(self, pbar, timestep: int, epsilon: float, loss: float, rb, lr: float):
         pbar.set_description(
             f"step={timestep} epoch={self.epoch} "
             + f"length={self.length_ema:.2f} reward={self.reward_ema:.2f} "
-            + f"games={self.total_games.sum():.0f} rb_used={rb.used()}/{rb.capacity()} "
-            + f"epsilon={epsilon:.3f} loss={loss:.3f}"
+            + f"games={self.total_games.sum():.0f} used={rb.used()}/{rb.capacity()} "
+            + f"epsilon={epsilon:.3f} loss={loss:.3f} lr={lr:.5f}"
         )
 
     def report_eval(self, length_avg, reward_avg, length_std, reward_std, total):
@@ -167,8 +174,8 @@ class State:
         self.reward_ema = npzfile["reward_ema"]
         self.length_ema = npzfile["length_ema"]
         self.ema_alpha = npzfile["ema_alpha"]
-        self.timestep = npzfile["timestep"]
-        self.epoch = npzfile["epoch"]
+        self._timestep = npzfile["timestep"]
+        self._epoch = npzfile["epoch"]
 
         # Update pbar with initial progress
         self.pbar.update(self.timestep)

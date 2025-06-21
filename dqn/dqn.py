@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 # Local
 from .model import QNetwork
@@ -44,29 +44,32 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         )
 
     observations, info = envs.reset()
-    for i, ts in enumerate(range(state.timestep, cfg.n_timesteps + 1)):
-        if i > 0:
-            # Async API: Receive observation and reward
-            (
-                observations_next,  # shape=(n_envs, n_frames, d_rows, d_cols)
-                rewards,  # shape=(n_envs,)
-                terminated,  # shape=(n_envs,)
-                _,
-                info,
-            ) = envs.recv()
-            state.update(rewards, terminated)  # Update metrics and state
 
-            # Store observations in replay buffer
-            rb.add(observations, observations_next, actions, rewards, terminated)
-            observations = observations_next
+    # Collect initial data
+    while state.timestep < cfg.replay_buffer_sampling:
+        actions = envs.action_space.sample()
+        # Sync ENV API: Perform actions and Receive observation and reward
+        (
+            observations_next,  # shape=(n_envs, n_frames, d_rows, d_cols)
+            rewards,  # shape=(n_envs,)
+            terminated,  # shape=(n_envs,)
+            _,
+            info,
+        ) = envs.step(actions)
+        state.update(rewards, terminated)  # Update metrics and state
 
+        # Store observations in replay buffer
+        rb.add(observations, observations_next, actions, rewards, terminated)
+        observations = observations_next
+
+    for step in range(state.timestep, cfg.n_timesteps + 1):
         # Video recording
         if cfg.record_train_video:
             writer.append_data(make_image(observations, size, size))
 
         # Epsilon greedy policy with linear schedule
         slope = (cfg.exploration_end - cfg.exploration_begin) / cfg.exploration_timesteps
-        epsilon = np.maximum(slope * ts + cfg.exploration_begin, cfg.exploration_end)
+        epsilon = np.maximum(slope * step + cfg.exploration_begin, cfg.exploration_end)
 
         if random.random() < epsilon:
             actions = envs.action_space.sample()  # shape=(n_envs,)
@@ -76,12 +79,8 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
                 q_values = q_network(x)  # shape=(n_envs, n_actions)
                 actions = torch.argmax(q_values, dim=1).cpu().numpy()  # shape=(n_envs,)
 
-        # Async API: Perform action
+        # Async ENV API: Perform actions
         envs.send(actions)
-
-        # Wait for buffer
-        if ts < cfg.replay_buffer_sampling:
-            continue
 
         # Sample minibatch from replay buffer
         (
@@ -123,26 +122,39 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         optimizer.step()
         scheduler.step()
 
+        # Async ENV API: Receive observation and reward
+        (
+            observations_next,  # shape=(n_envs, n_frames, d_rows, d_cols)
+            rewards,  # shape=(n_envs,)
+            terminated,  # shape=(n_envs,)
+            _,
+            info,
+        ) = envs.recv()
+        state.update(rewards, terminated)  # Update metrics and state
+
+        # Store observations in replay buffer
+        rb.add(observations, observations_next, actions, rewards, terminated)
+        observations = observations_next
+
         # Update target network
-        if ts % cfg.target_update_frequency == 0:
+        if step % cfg.target_update_frequency == 0:
             state.next_epoch()  # Update metrics and state
 
             for target_params, q_params in zip(target_network.parameters(), q_network.parameters()):
                 target_params.data.copy_(q_params.data)
 
-        #
         # Model and Replay Buffer checkpoint
-        #
-        if ts % cfg.checkpoint_frequency == 0:
+        if step % cfg.checkpoint_frequency == 0:
             state.checkpoint_save(cfg, q_network, optimizer, rb)
 
+            # TODO: Record train video via state
             if cfg.record_train_video:
                 writer.close()
                 output_path = f"{cfg.checkpoint_path}/{cfg.ckp_name()}_train.mp4"
                 writer = imageio.get_writer(output_path, format="FFMPEG", mode="I", fps=60)
 
         # Pause training and evaluate
-        if ts % cfg.evaluate_model_frequency == 0:
+        if step % cfg.evaluate_model_frequency == 0:
             eval(eval_envs, cfg, state, q_network)
             q_network.train()
 
