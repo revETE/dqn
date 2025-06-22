@@ -16,6 +16,7 @@ class State:
     def __init__(self, cfg: Config, *args, **kwargs) -> None:
         self._timestep = 1
         self._epoch = 0
+        self._resumed = False
 
         super().__init__(*args, **kwargs)
         self.total_length = np.zeros((cfg.n_envs,))
@@ -45,6 +46,10 @@ class State:
 
     def next_epoch(self):
         self._epoch += 1
+
+    @property
+    def resumed(self):
+        return self._resumed
 
     @property
     def timestep(self):
@@ -134,6 +139,9 @@ class State:
 
     def checkpoint_load(self, cfg: Config, q_network: QNetwork, optimizer, rb: ReplayBuffer):
         model_latest = f"{cfg.checkpoint_path}/latest__{cfg.checkpoint_model_name}.pth"
+        if len(cfg.resume_model_path) > 0:
+            model_latest = cfg.resume_model_path
+
         state_latest = f"{cfg.checkpoint_path}/latest__{cfg.checkpoint_state_name}.npz"
         buffer_latest = f"{cfg.checkpoint_path}/latest__{cfg.checkpoint_buffer_name}.npz"
 
@@ -142,6 +150,7 @@ class State:
             q_network.load_state_dict(checkpoint["q_network_state_dict"])
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             print(f"Model checkpoint loaded from {model_latest}")
+            self._resumed = True
 
         if os.path.exists(state_latest):
             self.load(state_latest)

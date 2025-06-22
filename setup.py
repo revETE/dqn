@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="dqn",
-    version="0.5.0",
+    version="0.6.0",
     packages=["dqn"],
     package_dir={"dqn": "dqn"},
     entry_points={

@@ -35,6 +35,7 @@ class Config:
 
     gamma_discount: float = 0.99  # Value function discounting factor
 
+    replay_buffer_warmup: int = 10_000  # Start learning after this number of frames
     replay_buffer_capacity: int = 1_000_000  # Replay buffer capacity
     replay_buffer_sampling: int = 1024  # Replay buffer sample size
 
@@ -51,6 +52,8 @@ class Config:
     checkpoint_model_name: str = "model"
     checkpoint_state_name: str = "state"
     checkpoint_buffer_name: str = "buffer"
+
+    resume_model_path: str = ""  # Resume from model at this path
 
     tensorboard_path: str = "run/tb"  # Tensorboard runs storage path
 

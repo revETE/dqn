@@ -27,7 +27,26 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
     target_network = QNetwork(envs.single_action_space.n).to(cfg.device)
     target_network.load_state_dict(q_network.state_dict())
 
-    if state.timestep > 1:
+    observations, info = envs.reset()
+
+    # Collect initial data
+    while rb.used() < max(cfg.replay_buffer_sampling * 3, cfg.replay_buffer_warmup):
+        actions = envs.action_space.sample()
+        # Sync ENV API: Perform actions and Receive observation and reward
+        (
+            observations_next,  # shape=(n_envs, n_frames, d_rows, d_cols)
+            rewards,  # shape=(n_envs,)
+            terminated,  # shape=(n_envs,)
+            _,
+            info,
+        ) = envs.step(actions)
+        state.update(rewards, terminated)  # Update metrics and state
+
+        # Store observations in replay buffer
+        rb.add(observations, observations_next, actions, rewards, terminated)
+        observations = observations_next
+
+    if state.resumed:
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=cfg.optimizer_lr,
@@ -44,25 +63,6 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
             div_factor=cfg.scheduler_div_factor,
             total_steps=cfg.n_timesteps + 2,
         )
-
-    observations, info = envs.reset()
-
-    # Collect initial data
-    while rb.used() < cfg.replay_buffer_sampling * 3:
-        actions = envs.action_space.sample()
-        # Sync ENV API: Perform actions and Receive observation and reward
-        (
-            observations_next,  # shape=(n_envs, n_frames, d_rows, d_cols)
-            rewards,  # shape=(n_envs,)
-            terminated,  # shape=(n_envs,)
-            _,
-            info,
-        ) = envs.step(actions)
-        state.update(rewards, terminated)  # Update metrics and state
-
-        # Store observations in replay buffer
-        rb.add(observations, observations_next, actions, rewards, terminated)
-        observations = observations_next
 
     for step in range(state.timestep, cfg.n_timesteps + 1):
         # Video recording
