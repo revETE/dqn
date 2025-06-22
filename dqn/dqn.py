@@ -31,22 +31,24 @@ def train(envs, eval_envs, cfg: Config, state: State, rb: ReplayBuffer, q_networ
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=cfg.optimizer_lr,
-            div_factor=2,
+            pct_start=cfg.scheduler_pct_start,
+            div_factor=cfg.scheduler_div_factor,
             last_epoch=state.timestep,
-            total_steps=cfg.n_timesteps,
+            total_steps=cfg.n_timesteps + 2,
         )
     else:
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=cfg.optimizer_lr,
-            div_factor=2,
-            total_steps=cfg.n_timesteps,
+            pct_start=cfg.scheduler_pct_start,
+            div_factor=cfg.scheduler_div_factor,
+            total_steps=cfg.n_timesteps + 2,
         )
 
     observations, info = envs.reset()
 
     # Collect initial data
-    while state.timestep < cfg.replay_buffer_sampling:
+    while rb.used() < cfg.replay_buffer_sampling * 3:
         actions = envs.action_space.sample()
         # Sync ENV API: Perform actions and Receive observation and reward
         (

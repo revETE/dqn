@@ -42,6 +42,8 @@ class Config:
     evaluate_model_frequency: int = 1000
 
     optimizer_lr: float = 1e-3
+    scheduler_pct_start: float = 0.3  # OneCycleLR pct_start
+    scheduler_div_factor: float = 2  # OneCycleLR div_factor
 
     checkpoint_frequency: int = 1000  # Global checkpoint frequency
     checkpoint_buffer_frequency: int = 10_000  # Replay buffer checkpoint frequency
