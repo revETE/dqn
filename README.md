@@ -3,6 +3,8 @@
 This is DQN Algorithm ([arXiv:1312.5602](https://arxiv.org/abs/1312.5602))
 implementation from scratch for educational purposes. Use on your own risk.
 
+<img src="https://raw.githubusercontent.com/revETE/dqn/main/assets/space_invaders__default__1750639307__model.gif" width="600" />
+
 ## Evaluation
 
 Paper reported perfomance:
